@@ -107,6 +107,7 @@ def main(data_filename: str = "data/validation/case1.csv",
                      Tw=T1,  # assume wall temperature is in thermal eq. with gas
                      dlnAdx=dlnAdx)
     ssbl.addProbe(max(ssbl.x))  # end wall probe
+    ssbl.addXTDiagram('T')
 
     # Solve
     t0 = time.perf_counter()
@@ -142,7 +143,7 @@ def main(data_filename: str = "data/validation/case1.csv",
     # make plots of probe and XT diagrams
     plt.close("all")
     mpl.rcParams['font.size'] = fontsize
-    plt.rc('text', usetex=True)
+    #plt.rc('text', usetex=True)
     plt.figure(figsize=(4, 4))
     plt.plot(np.array(ssnbl.probes[0].t) * 1000.0, np.array(ssnbl.probes[0].p) / 1.0e5, 'k',
              label="$\mathrm{Without\ BL\ Model}$", linewidth=2.0)
@@ -154,6 +155,8 @@ def main(data_filename: str = "data/validation/case1.csv",
     plt.ylabel("$p\ [\mathrm{bar}]$")
     plt.legend(loc="lower right")
     plt.tight_layout()
+
+    ssbl.plotXTDiagram(ssbl.XTDiagrams["t"],limits=[0,2000.0])
 
     if show_results:
         plt.show()

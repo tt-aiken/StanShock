@@ -1,0 +1,119 @@
+"""
+ Cantera Format data file for high-temperature air, with ions.
+ Reaction rate data from Johnston and Brandis 2014.  Requires seperate treatment 
+ electron and vibration temperature that is not automatically included with Cantera.
+
+ Thermodynamic data uses NASA9 polynomial fits from: 
+ Bonnie J. McBride, Michael J. Zehe, and Sanford Gordon. NASA Glenn 
+ Coefficients for Calculating Thermodynamic Properties of Individual Species. 
+ NASA Glenn Research Center, Cleveland, Ohio NASA/TP-2002-211556. 2002.
+   
+ 8 June 2019 (revised)  JES
+"""
+
+units(length='cm', time='s', quantity='mol', act_energy='cal/mol')
+
+          
+ideal_gas(name='gas',
+          elements="O Ar He",
+          species="""O O2 AR HE""",
+          reactions = 'none',
+          transport = 'Mix',
+          initial_state=state(temperature=300.0, pressure=OneAtm))
+
+#-------------------------------------------------------------------------------
+# Species data
+#-------------------------------------------------------------------------------
+
+species(name='O2',
+        atoms='O:2',
+        thermo=(NASA9([200.00, 1000.00],
+                      [-3.425563420E+04,  4.847000970E+02,  1.119010961E+00,
+                        4.293889240E-03, -6.836300520E-07, -2.023372700E-09,
+                        1.039040018E-12, -3.391454870E+03,  1.849699470E+01]),
+                NASA9([1000.00, 6000.00],
+                      [-1.037939022E+06,  2.344830282E+03,  1.819732036E+00,
+                        1.267847582E-03, -2.188067988E-07,  2.053719572E-11,
+                       -8.193467050E-16, -1.689010929E+04,  1.738716506E+01]),
+                NASA9([6000.00, 20000.00],
+                      [ 4.975294300E+08, -2.866106874E+05,  6.690352250E+01,
+                       -6.169959020E-03,  3.016396027E-07, -7.421416600E-12,
+                        7.278175770E-17,  2.293554027E+06, -5.530621610E+02])),
+        transport=gas_transport(geom='linear',
+                                diam=3.458,
+                                well_depth=107.4,
+                                polar=1.6,
+                                rot_relax=3.8),
+        note='Ref-Elm. Gurvich,1989 pt1 p94 pt2 p9. [tpis89]')
+
+species(name='O',
+        atoms='O:1',
+        thermo=(NASA9([200.00, 1000.00],
+                      [-7.953611300E+03,  1.607177787E+02,  1.966226438E+00,
+                        1.013670310E-03, -1.110415423E-06,  6.517507500E-10,
+                       -1.584779251E-13,  2.840362437E+04,  8.404241820E+00]),
+                NASA9([1000.00, 6000.00],
+                      [ 2.619020262E+05, -7.298722030E+02,  3.317177270E+00,
+                       -4.281334360E-04,  1.036104594E-07, -9.438304330E-12,
+                        2.725038297E-16,  3.392428060E+04, -6.679585350E-01]),
+                NASA9([6000.00, 20000.00],
+                      [ 1.779004264E+08, -1.082328257E+05,  2.810778365E+01,
+                       -2.975232262E-03,  1.854997534E-07, -5.796231540E-12,
+                        7.191720164E-17,  8.890942630E+05, -2.181728151E+02])),
+        transport=gas_transport(geom='atom',
+                                diam=2.05,
+                                well_depth=145.0),
+        note='D0(O2):Brix,1954. Moore,1976. Gordon,1999. [g 5/97]')
+
+species(name='AR',
+        atoms='Ar:1',
+        thermo=(NASA9([200.00, 1000.00],
+                      [ 0.000000000E+00,  0.000000000E+00,  2.500000000E+00,
+                        0.000000000E+00,  0.000000000E+00,  0.000000000E+00,
+                        0.000000000E+00, -7.453750000E+02,  4.379674910E+00]),
+                NASA9([1000.00, 6000.00],
+                      [ 2.010538475E+01, -5.992661070E-02,  2.500069401E+00,
+                       -3.992141160E-08,  1.205272140E-11, -1.819015576E-15,
+                        1.078576636E-19, -7.449939610E+02,  4.379180110E+00]),
+                NASA9([6000.00, 20000.00],
+                      [-9.951265080E+08,  6.458887260E+05, -1.675894697E+02,
+                        2.319933363E-02, -1.721080911E-06,  6.531938460E-11,
+                       -9.740147729E-16, -5.078300340E+06,  1.465298484E+03])),
+        transport=gas_transport(geom='atom',
+                                diam=3.33,
+                                well_depth=136.5),
+        note='Ref-Elm. Spec: NSRDS-NBS 35 1971. [g 3/98]')
+
+species(name='HE',
+        atoms='He:1',
+        thermo=(NASA9([200.00, 1000.00],
+                      [ 0.000000000E+00,  0.000000000E+00,  2.500000000E+00,
+                        0.000000000E+00,  0.000000000E+00,  0.000000000E+00,
+                        0.000000000E+00, -7.453750000E+02,  9.287239740E-01]),
+                NASA9([1000.00, 6000.00],
+                      [ 0.000000000E+00,  0.000000000E+00,  2.500000000E+00,
+                        0.000000000E+00,  0.000000000E+00,  0.000000000E+00,
+                        0.000000000E+00, -7.453750000E+02,  9.287239740E-01]),
+                NASA9([6000.00, 20000.00],
+                      [ 3.396845420E+06, -2.194037652E+03,  3.080231878E+00,
+                       -8.068957550E-05,  6.252784910E-09, -2.574990067E-13,
+                        4.429960218E-18,  1.650518960E+04, -4.048814390E+00])),
+        transport=gas_transport(geom='atom',
+                                diam=2.576,
+                                well_depth=10.2),
+        note='Ref-Elm. Moore NSRDS-NBS 35 1971; NSRDS-NBS 34 1970. [g 5/97]')
+
+#-------------------------------------------------------------------------------
+# Reaction data
+# Reaction rates for neutral species from Table 4 of Johnston and Brandis  JQSRT 149 (2014), 303-317.
+# Activation energies converted to cal/mol  using 1.9872 cal/mol per K.
+# Preexponentials are in mol/cm3 units in their table.
+# Reactions 1-7 are based on an effective temperature  Ta = sqrt(TvTtr) where Tv is the
+# vibrational temperature and Ttr is the translational-rotational temperature.
+# Reactions 8-20 are based on Ttr the translational-rotational temperature
+#-------------------------------------------------------------------------------
+
+# Reaction 7
+#three_body_reaction('O2 + M <=> O + O + M', [2.000000e+21, -1.5, 1.17960E5],
+#                    efficiencies='O2:1.0 O:5.0 AR:1.0 HE:1.0')
+# R7 of JB 2014

@@ -1,0 +1,20 @@
+ ==================================================
+
+   Multi-Temperature Collisional Radiative (MTCR)  
+  State-to-State Chemical Kinetics Simulation Code 
+
+                   Developed at:                   
+  Nonequilibrium Gas and Plasma Dynamics Laboratory
+
+ ==================================================
+
+ Initializing global constant data
+              setup data
+              species and rate data
+              chemistry data
+              partition function data
+              excitation rates
+              source term arrays
+
+ Opening problem setup file: ./input/prob_setup.inp
+ ERROR: Problem opening problem setup file

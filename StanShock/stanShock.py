@@ -371,6 +371,100 @@ def HLLC(rLR,uLR,pLR,YLR,gamma):
     
     return F
 
+@njit(double2D(double2D, double2D, double2D, double3D, double1D))
+def HLLC_CF(rLR,uLR,pLR,YLR,gamma):
+    '''
+    Method: HLLC_CF
+    ------------------------------------------------------------.----------
+    This method computes the flux at each interface using the centralized flux
+    version of HLLC as proposed in J. Comp. Phys. 423 (2020) 109762
+        inputs:
+            rLR=array containing left and right density states [nLR,nFaces]
+            uLR=array containing left and right velocity states [nLR,nFaces]
+            pLR=array containing left and right pressure states [nLR,nFaces]
+            YLR=array containing left and right species mass fraction states
+                [nLR,nFaces,nSp]
+            gamma= array containing the specific heat [nFaces]
+        return:
+            F=modeled Euler fluxes [nFaces,mn+nSp]
+    '''
+    nLR=len(rLR)
+    nFaces = len(rLR[0])
+    nSp=YLR[0].shape[1]
+    nDim=mn+nSp
+    
+    #compute the wave speeds
+    SLR=np.empty((2,nFaces))
+    aLR=np.empty((2,nFaces))
+    SStar=np.empty((nFaces))
+    ULR=np.empty((2,nFaces,nDim))
+    ULRStar=np.empty((2,nFaces,nDim))
+    for iFace in range(nFaces):
+        aLR[0,iFace] = np.sqrt(gamma[iFace]*pLR[0,iFace]/rLR[0,iFace])
+        aLR[1,iFace] = np.sqrt(gamma[iFace]*pLR[1,iFace]/rLR[1,iFace])
+        aL = aLR[0,iFace]
+        aR = aLR[1,iFace]
+        uL = uLR[0,iFace]
+        uR = uLR[1,iFace]
+        rL = rLR[0,iFace]
+        rR = rLR[1,iFace]
+        pL = pLR[0,iFace]
+        pR = pLR[1,iFace]
+        uHat = (uL * np.sqrt(rL) + uR * np.sqrt(rR)) / (np.sqrt(rL) + np.sqrt(rR))
+        aHatSq = (aL**2*np.sqrt(rL) + aR**2*np.sqrt(rR)) / (np.sqrt(rL) + np.sqrt(rR)) \
+               + 0.5*(np.sqrt(rL)*np.sqrt(rR)) / ((np.sqrt(rL)+np.sqrt(rR))**2) * (uR - uL)**2
+        aHat = np.sqrt(aHatSq)
+        SLR[0,iFace] = min(uL-aL, uHat-aHat)
+        SLR[1,iFace] = max(uR+aR, uHat+aHat)
+        SStar[iFace] = (pR - pL + rL*uL*(SLR[0,iFace]-uL) - rR*uR*(SLR[1,iFace]-uR)) / (rL*(SLR[0,iFace]-uL) - rR*(SLR[1,iFace]-uR))
+ 
+
+    #find the regular flux
+    FLR=np.empty((2,nFaces,nDim))
+    for K in range(nLR):
+        for iFace in range(nFaces):
+            FLR[K,iFace,0]=rLR[K,iFace]*uLR[K,iFace]
+            FLR[K,iFace,1]=rLR[K,iFace]*uLR[K,iFace]**2.0+pLR[K,iFace]
+            FLR[K,iFace,2]=uLR[K,iFace]*(gamma[iFace]/(gamma[iFace]-1)*pLR[K,iFace]+0.5*rLR[K,iFace]*uLR[K,iFace]**2.0)
+            for kSp in range(nSp): FLR[K,iFace,3+kSp]=rLR[K,iFace]*uLR[K,iFace]*YLR[K,iFace,kSp]
+
+    # construct the left and right conservative variable vector (normal and starred)
+    for K in range(nLR) :
+        for iFace in range(nFaces) : 
+            # normal
+            ULR[K,iFace,0]=rLR[K,iFace]
+            ULR[K,iFace,1]=rLR[K,iFace]*uLR[K,iFace]
+            ULR[K,iFace,2]=pLR[K,iFace]/(gamma[iFace]-1.0)+0.5*rLR[K,iFace]*uLR[K,iFace]**2.0
+            for kSp in range(nSp): ULR[K,iFace,3+kSp]=rLR[K,iFace]*YLR[K,iFace,kSp]
+            # starred
+            prefactor = rLR[K,iFace] * (SLR[K,iFace] - uLR[K,iFace]) / (SLR[K,iFace] - SStar[iFace])
+            ULRStar[K,iFace,0]=prefactor
+            ULRStar[K,iFace,1]=prefactor*SStar[iFace]
+            ULRStar[K,iFace,2]=prefactor*(ULR[K,iFace,2]/rLR[K,iFace]+(SStar[iFace]-uLR[K,iFace])*(SStar[iFace]+pLR[K,iFace]/(rLR[K,iFace]*(SLR[K,iFace]-uLR[K,iFace]))))
+            for kSp in range(nSp): ULRStar[K,iFace,3+kSp]=prefactor*YLR[K,iFace,kSp]
+        
+    #compute the modeled flux
+    F=np.empty((nFaces,mn+nSp))
+    for iFace in range(nFaces):
+        if SLR[0,iFace] >= 0.0:
+            for iDim in range(nDim): F[iFace,iDim]=FLR[0,iFace,iDim]
+        elif SLR[1,iFace] <= 0.0:
+            for iDim in range(nDim): F[iFace,iDim]=FLR[1,iFace,iDim]
+        else:
+            MaLimit = 0.1
+            MaLocal = max(abs(uLR[0,iFace]/aLR[0,iFace]),abs(uLR[1,iFace]/aLR[1,iFace]))
+            phi = np.sin(min(1,MaLocal/MaLimit)*np.pi/2.0)
+            if phi != 0.0 :
+                SLR[0,iFace] *= phi
+                SLR[1,iFace] *= phi
+            #flux update
+            for iDim in range(nDim): 
+                F[iFace,iDim] = 0.5*(FLR[0,iFace,iDim]+FLR[1,iFace,iDim]) \
+                              + 0.5*(SLR[0,iFace]*(ULRStar[0,iFace,iDim]-ULR[0,iFace,iDim]) \
+                              + abs(SStar[iFace]) * (ULRStar[0,iFace,iDim]-ULRStar[1,iFace,iDim]) \
+                              + SLR[1,iFace] * (ULRStar[1,iFace,iDim]-ULR[1,iFace,iDim]))
+
+    return F
 
 @njit(double1D(double2D, double1D))
 def getR(Y,molecularWeights):
@@ -427,7 +521,9 @@ def getCp(T,Y,TTable,a,b):
     #determine cp
     cp = np.zeros(nX)
     for iX in range(nX):
-        if (T[iX]<TMin) or (T[iX]>TMax): raise Exception("Temperature not within table")
+        if (T[iX]<TMin) or (T[iX]>TMax): 
+            print(T[iX], TMin, TMax)
+            raise Exception("Temperature not within table")
         index = indices[iX]
         bbar=0.0
         for iSp in range(nSp):
@@ -453,9 +549,9 @@ class thermoTable(object):
         enthalpies at the table points.
         '''
         nSp = gas.n_species
-        self.TMin=50.0
+        self.TMin=1.0       # was 50.0
         self.dT=100.0
-        self.TMax=9950.0
+        self.TMax=30001.0   # was 9950.0
         self.T = np.arange(self.TMin,self.TMax,self.dT) #vector of temperatures assuming thermal equilibrium between species
         nT = len(self.T)
         self.h = np.zeros((nT,nSp)) #matrix of species enthalpies per temperature
@@ -626,6 +722,8 @@ class skinFriction(object):
         cf = np.zeros_like(Re)
         laminarIndices = np.logical_and(Re>0.0, Re <= self.ReCrit)
         cf[laminarIndices]=16.0/Re[laminarIndices]
+        if any(np.isinf(cf)) :
+            cf[np.where(np.isinf(cf))] = 0.0
         turbulentIndices = Re> self.ReCrit
         cf[turbulentIndices] = np.interp(Re[turbulentIndices],self.ReTable,self.cfTable)
         if np.any(Re>self.ReMax): raise Exception("Error: Reynolds number exceeds the maximum value of %f: skinFriction Table bounds must be adjusted" % (self.ReMax))
@@ -782,6 +880,7 @@ class stanShock(object):
             self.p=[] #pressure
             self.gamma=[] #specific heat ratio
             self.Y=[] #species mass fractions
+            self.T=[] #translational temperature
 ##############################################################################
     def addProbe(self,probeLocation,skipSteps=0,probeName=None):
         '''
@@ -974,7 +1073,8 @@ class stanShock(object):
             if type(self.boundaryConditions[ibc]) is str:
                 if self.boundaryConditions[ibc].lower()=='reflecting' or \
                       self.boundaryConditions[ibc].lower()=='symmetry':
-                    uLR[NAssign,iX]=0.0
+                    uLR[NAssign,iX]=-uLR[NUse,iX]
+
                 elif self.verbose and self.boundaryConditions[ibc].lower()!='outflow':  
                     print('''Unrecognized Boundary Condition. Applying outflow by default.\n''')
             else:
@@ -1490,10 +1590,13 @@ class stanShock(object):
                 probe.r.append((interpolate(self.x,self.r,probe.probeLocation)))
                 probe.u.append((interpolate(self.x,self.u,probe.probeLocation)))
                 probe.p.append((interpolate(self.x,self.p,probe.probeLocation)))
+                
                 probe.gamma.append((interpolate(self.x,self.gamma,probe.probeLocation)))
                 YProbe=np.array([(interpolate(self.x,self.Y[:,kSp],probe.probeLocation))\
                                   for kSp in range(nSp)])
                 probe.Y.append(YProbe)
+                T=self.thermoTable.getTemperature(self.r,self.p,self.Y)
+                probe.T.append((interpolate(self.x,T,probe.probeLocation)))
 ##############################################################################
     def updateXTDiagrams(self,iters):
         '''
@@ -1549,6 +1652,7 @@ class stanShock(object):
                     tFinal=final time
         '''
         iters = 0
+        self.result = self.__result()
         while self.t<tFinal:
             dt=min(tFinal-self.t,self.timeStep())
             #advance advection and chemistry with Strang Splitting
@@ -1562,6 +1666,7 @@ class stanShock(object):
             #perform other updates
             self.t+=dt
             self.updateProbes(iters)
+            self.updateResult(dt)
             self.updateXTDiagrams(iters)
             iters+=1
             if self.verbose and iters%self.outputEvery==0: 
@@ -1771,3 +1876,67 @@ class stanShock(object):
             print("Search stopped due to no sample points found yielding enough improvement.")
         elif self.verbose: print("Minimum Found. Setting to minimum state.")
         optimizationFunction(self.designs[np.argmin(self.yOpt)])
+##############################################################################
+    class __result(object):
+        '''
+        Class: result
+        -----------------------------------------------------------------------
+        This class is used to store the relavant requested result data
+        '''
+        def __init__(self):
+            self.time = []
+            self.shockPosition = []
+            self.shockVelocity = []
+            self.resultSkipSteps=0 #number of timesteps to skip
+            self.shockPosition=[]
+            self.r = []
+            self.p = []
+            self.u = []
+            self.T = []
+            self.Y = []
+            self.gamma = []
+
+##############################################################################
+    def updateResult(self, dt):
+        '''
+        Method: updateResult
+        ----------------------------------------------------------------------
+        This method finds the location of the shock wave and appends it to the 
+        result.shockPosition. Then appends other variables to the self.result 
+        object that stores the time histories.
+            Inputs
+                dt=timestep (s)
+        '''
+
+        from scipy.interpolate import CubicSpline
+
+        # special initializations at timestep 0
+        if len(self.result.time) == 1 :
+            self.result.x = self.x 
+
+        # update the time
+        self.result.time.append(self.t)
+
+        # find the shock position, use the maximum of the pressure gradient
+        normalizedGradP = np.diff(self.p,prepend=self.p[0]) / self.dx / self.p
+        refinedX = np.linspace(min(self.x), max(self.x), len(self.x)*10)
+        cs = CubicSpline(self.x, normalizedGradP)
+        refinedGradP = cs(refinedX)
+        shockPosition = refinedX[np.argmax(refinedGradP)]
+        self.result.shockPosition.append(shockPosition)
+
+        # find the shock velocity using simple finite differencing
+        if (len(self.result.shockPosition) >= 4) :
+            refinedTime = np.linspace(0.0, self.t, 10*len(self.result.time))
+            cs = CubicSpline(self.result.time, self.result.shockPosition)
+            shockVelocity = cs(self.t, 1)
+            self.result.shockVelocity.append(shockVelocity)
+            if (len(self.result.shockVelocity) == 4) :
+                for i in range(3) : self.result.shockVelocity.append(shockVelocity)
+                
+        # update all the fields for gas properties 
+        self.result.r.append(self.r)
+        self.result.u.append(self.u)
+        self.result.p.append(self.p)
+        self.result.T.append(self.thermoTable.getTemperature(self.r,self.p,self.Y))
+        self.result.gamma.append(self.gamma)
